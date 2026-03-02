@@ -1,0 +1,10 @@
+[package]
+name = "grids"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# bevy = { version = "0.18.0"}
+bevy = { version = "0.18.0", features = ["dynamic_linking"] }
+
+
