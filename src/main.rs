@@ -17,11 +17,19 @@ struct ChessPieces;
 #[derive(Component)]
 struct Colored;
 
-#[derive(Component)]
+#[derive(Component, PartialEq, Eq)]
 enum PieceColor{
     White,
     Black
 }
+#[derive(Component)]
+enum ButtonType {
+    Play,
+    Quit
+}
+
+#[derive(Component)]
+struct MainMenuComponent;
 
 #[derive(Resource)]
 struct SelectedPiece(Option<Entity>);
@@ -41,12 +49,25 @@ struct ChessMaterials{
 
 struct MainPlugin;
 
+#[derive(Clone, Copy, Default, Eq, PartialEq, Debug, Hash, States)]
+enum GameState {
+    #[default]
+    Menu,
+    Game,
+}
+
+
 impl Plugin for MainPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(SelectedPiece(None));
         app.insert_resource(Animation{target: None, final_location: None, is_finished: true});
-        app.add_systems(Startup, (setup_materials, init_scene, create_chess_pieces).chain());
-        app.add_systems(Update, (update_input, update_textures, update_animation));
+        app.init_state::<GameState>();
+
+        app.add_systems(Startup, (setup_materials, init_menu).chain());
+
+        app.add_systems(OnEnter(GameState::Game), (remove_menu, init_scene, create_chess_pieces).chain());
+        app.add_systems(Update, (update_input, update_textures, update_animation).run_if(in_state(GameState::Game)));
+        app.add_systems(Update, update_buttons);
     }
 }
 
@@ -55,6 +76,127 @@ fn main() {
         .add_plugins((DefaultPlugins, MeshPickingPlugin))
         .add_plugins(MainPlugin)
     .run();
+}
+
+fn init_menu(mut commands: Commands) {
+
+    commands.spawn((Camera2d, MainMenuComponent));
+
+    commands.spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                flex_direction: FlexDirection::Column,
+                ..default()
+            },
+            MainMenuComponent,
+            children![
+                (
+                    Text::new("3D CHESS"),
+                    TextFont {
+                        font_size: 80.0,
+                        ..default()
+                    },
+                    Label
+                ), 
+                (
+                    button("PLAY", ButtonType::Play)
+                ), 
+                (
+                    button("QUIT", ButtonType::Quit)
+                )
+            ]
+        ));
+    
+}
+
+fn button(text: &str, button_type: ButtonType) -> impl Bundle {
+    (
+        Node {
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            ..default()
+        },
+        children![(
+            Button,
+            button_type,
+            Node {
+                width: px(150),
+                height: px(65),
+                margin: UiRect::all(px(20)),
+                border: UiRect::all(px(5)),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                border_radius: BorderRadius::MAX,
+                ..default()
+            },
+            BorderColor::all(Color::WHITE),
+            BackgroundColor(Color::BLACK),
+            children![(
+                Text::new(text),
+                TextFont {
+                    font_size: 33.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.9, 0.9, 0.9)),
+                TextShadow::default(),
+            )]
+        )],
+    )
+}
+
+fn update_buttons(
+    mut interaction_query: Query<
+        (
+            Entity,
+            &Interaction,
+            &mut BackgroundColor,
+            &mut BorderColor,
+            &mut Button,
+            &ButtonType,
+        ),
+        Changed<Interaction>,
+    >,
+    mut app_exit_writer: MessageWriter<AppExit>,
+    mut game_state: ResMut<NextState<GameState>>,
+) {
+
+    for (entity, interaction, mut color, mut border_color, mut button, button_type) in
+        &mut interaction_query
+    {
+
+        match *interaction {
+            Interaction::Pressed => {
+                match button_type {
+                    ButtonType::Play => {
+                        game_state.set(GameState::Game);
+                    },
+                    ButtonType::Quit => {
+                        app_exit_writer.write(AppExit::Success);
+                    },
+                }
+                *color = Color::srgb(1.0, 1.0, 1.0).into();
+                // *border_color = BorderColor::all(RED);
+            }
+            Interaction::Hovered => {
+                *color = Color::srgb(0.35, 0.35, 0.35).into();
+                // *border_color = BorderColor::all(Color::WHITE);
+            }
+            Interaction::None => {
+                *color = Color::srgb(0.15, 0.15, 0.15).into();
+                // *border_color = BorderColor::all(Color::WHITE);
+            }
+        }
+    }
+    
+}
+
+fn remove_menu(mut commands: Commands, menu_query: Query<Entity, With<MainMenuComponent>>) {
+    for menu_entity in menu_query {
+        commands.entity(menu_entity).despawn();
+    }
 }
 
 fn setup_materials(mut commands: Commands, mut materials: ResMut<Assets<StandardMaterial>>) {
@@ -254,8 +396,9 @@ fn update_input(
 fn handle_click(
 
     trigger: On<Pointer<Press>>, 
-    mut transform_query: Query<&mut Transform>,
+    mut transform_query: Query<(Entity, &mut Transform)>,
     chess_piece_query: Query<&ChessPieces>,
+    chess_piece_color_query: Query<&PieceColor>,
     mut selected_piece: ResMut<SelectedPiece>,
     mut animation: ResMut<Animation>,
     mut commands: Commands,
@@ -270,26 +413,58 @@ fn handle_click(
     
     if let Some(selected_piece_enity) = selected_piece.0 {
         if chess_piece_query.contains(hovered_entity) && selected_piece_enity != hovered_entity {
-            commands.entity(hovered_entity).despawn();
+            match chess_piece_color_query.get_many([selected_piece_enity, hovered_entity]){
+                Ok([selected_piece_enity_color, hovered_piece_entity_color]) => {
+                    if selected_piece_enity_color != hovered_piece_entity_color {
+                        commands.entity(hovered_entity).despawn_children();
+                    } else {
+                        return;
+                    }
+                },
+                Err(_) => todo!(),
+            }
         }
 
-        if let Ok(hover_transform) = transform_query.get_mut(hovered_entity){
-            let mut final_vec = hover_transform.translation;
-            final_vec.y = 0.55;
+        let mut hover_transform_vec = Vec3::ZERO;
 
-            animation.target = Some(selected_piece_enity);
-            animation.final_location = Some(final_vec);
-            animation.is_finished = false;
-
-
-            selected_piece.0 = None;
+        if let Ok((_entity, hover_transform)) = transform_query.get_mut(hovered_entity){
+            hover_transform_vec = hover_transform.translation;
         }
+
+        for (entity, transform) in transform_query {
+            if 
+            chess_piece_query.contains(entity) && 
+            transform.translation.x == hover_transform_vec.x &&
+            transform.translation.z == hover_transform_vec.z
+            {
+                match chess_piece_color_query.get_many([selected_piece_enity, entity]){
+                    Ok([selected_piece_enity_color, hovered_piece_entity_color]) => {
+                        if selected_piece_enity_color != hovered_piece_entity_color {
+                            commands.entity(entity).despawn_children();
+                        } else {
+                            return;
+                        }
+                    },
+                    Err(_) => todo!(),
+                }
+            }
+        }
+
+        let mut final_vec = hover_transform_vec;
+        final_vec.y = 0.55;
+
+        animation.target = Some(selected_piece_enity);
+        animation.final_location = Some(final_vec);
+        animation.is_finished = false;
+
+
+        selected_piece.0 = None;
 
     } else {
         if let Ok(ChessPieces) = chess_piece_query.get(hovered_entity) {
             selected_piece.0 = Some(hovered_entity);
             
-            if let Ok(hover_transform) = transform_query.get_mut(hovered_entity) {
+            if let Ok((_entity, hover_transform)) = transform_query.get_mut(hovered_entity) {
                 
                 let mut final_vec = hover_transform.translation;
                 final_vec.y = 2.0;
