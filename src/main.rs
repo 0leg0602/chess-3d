@@ -1,3 +1,35 @@
+//! ISU Stage 2 - Part 2
+//! 3d chess I made on rust using the bevy : "A refreshingly simple data-driven game engine built in Rust Free and Open Source Forever!".
+//! Firstly I wanted to try to make some fractals in a graphics window using a rust library I have never used before,
+//! but then I got sidetracked and discovered some cool 3d features bevy has, 
+//! and remembering the "queen chessboard problem" assignment made me want to recreate chess using 3d graphics.
+//! 
+//! So even though there is no recusion, I think my project is close enought for the assignment
+//! 
+//! Features:
+//! 
+//! 1. Menu
+//! 2. Game
+//! 
+//! In the menu there is 2 buttons one starts the game another stops the program.
+//! The entire reason I added menu is because I was planning to add setting and needed a place to change them, but ran out of time so no settings.
+//! 
+//! To control my game use WASD or arrow keys to pivot the camera. Use mouse wheel or plus minus on keyboard to zoom the camera.
+//! 
+//! Clicking a piece selects it, pressing ESC unselects the piece.
+//! 
+//! While piece is selected click on any piece to capture it or on any cell to move to it.
+//! 
+//! (Previsouly there were a bug which made it so you can move multiple peices to the same cell, 
+//! because moving a piece to a cell by where a piece already exists by clicking on cell and not the piece
+//! would not cause a piece to be captured, but now it is fixed)
+//! 
+//! I wanted to add timer and make each piece move only following the rules as well as highlighting possible, but again I ran out of time.
+//! However I was able to make it that pieces of the same color can not captures each other.
+//! 
+//! At any point during the game you can press backspace and move back to the menu and reset the board. 
+
+
 use std::f32::consts::PI;
 
 use bevy::{input::mouse::MouseWheel, prelude::*};
@@ -68,10 +100,10 @@ impl Plugin for MainPlugin {
         app.insert_state(GameState::Menu);
 
         app.add_systems(OnEnter(GameState::Menu), (remove_game, setup_materials, init_menu).chain());
-
         app.add_systems(OnEnter(GameState::Game), (remove_menu, init_scene, create_chess_pieces).chain());
+
         app.add_systems(Update, (update_input, update_textures, update_animation).run_if(in_state(GameState::Game)));
-        app.add_systems(Update, update_buttons);
+        app.add_systems(Update, (update_buttons).run_if(in_state(GameState::Menu)));
     }
 }
 
