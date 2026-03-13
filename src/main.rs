@@ -154,11 +154,8 @@ fn button(text: &str, button_type: ButtonType) -> impl Bundle {
 fn update_buttons(
     mut interaction_query: Query<
         (
-            Entity,
             &Interaction,
             &mut BackgroundColor,
-            &mut BorderColor,
-            &mut Button,
             &ButtonType,
         ),
         Changed<Interaction>,
@@ -167,7 +164,7 @@ fn update_buttons(
     mut game_state: ResMut<NextState<GameState>>,
 ) {
 
-    for (entity, interaction, mut color, mut border_color, mut button, button_type) in
+    for (interaction, mut color, button_type) in
         &mut interaction_query
     {
 
@@ -182,15 +179,12 @@ fn update_buttons(
                     },
                 }
                 *color = Color::srgb(1.0, 1.0, 1.0).into();
-                // *border_color = BorderColor::all(RED);
             }
             Interaction::Hovered => {
                 *color = Color::srgb(0.35, 0.35, 0.35).into();
-                // *border_color = BorderColor::all(Color::WHITE);
             }
             Interaction::None => {
                 *color = Color::srgb(0.15, 0.15, 0.15).into();
-                // *border_color = BorderColor::all(Color::WHITE);
             }
         }
     }
